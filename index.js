@@ -44,13 +44,18 @@ async function loadPositions() {
 // loads all needed data for position
 async function updatePosition(tokenId) {
 
-  // if procesing - retry later
+  // if processing - retry later
   if (positions[tokenId] && (positions[tokenId].isChecking || positions[tokenId].isExecuting || positions[tokenId].isUpdating)) { 
     setTimeout(async() => await updatePosition(tokenId), 10000)
     return
   }
-  positions[tokenId] = { isUpdating: true }
 
+  if (!positions[tokenId]) {
+    positions[tokenId] = { isUpdating: true }
+  } else {
+    positions[tokenId].isUpdating = true
+  }
+  
   try {
     const debtShares = await v3VaultContract.loans(tokenId)
     if (debtShares.gt(0)) {
@@ -84,9 +89,8 @@ async function updatePosition(tokenId) {
 
       const collateralFactorX32 = cachedCollateralFactorX32[token0] < cachedCollateralFactorX32[token1] ? cachedCollateralFactorX32[token0] : cachedCollateralFactorX32[token1]
 
-      positions[tokenId] = { tokenId, liquidity, tickLower, tickUpper, tickSpacing, fee, token0: token0.toLowerCase(), token1: token1.toLowerCase(), decimals0, decimals1, poolAddress, debtShares, owner, collateralFactorX32, fees0: fees.amount0, fees1: fees.amount1 }
+      positions[tokenId] = { ...positions[tokenId], tokenId, liquidity, tickLower, tickUpper, tickSpacing, fee, token0: token0.toLowerCase(), token1: token1.toLowerCase(), decimals0, decimals1, poolAddress, debtShares, owner, collateralFactorX32, fees0: fees.amount0, fees1: fees.amount1 }
 
-      await checkPosition(positions[tokenId])
     } else {
       delete positions[tokenId]
     }
@@ -126,7 +130,11 @@ async function checkPosition(position) {
     const debtValue = position.debtShares.mul(cachedExchangeRateX96).div(Q96)
 
     if (debtValue.gt(collateralValue)) {
-      info = await v3VaultContract.loanInfo(position.tokenId)
+      // only call this once per minute to update position (&fees)
+      if (!position.lastLiquidationCheck || position.lastLiquidationCheck + 60000 < Date.now()) {
+        info = await v3VaultContract.loanInfo(position.tokenId)
+        position.lastLiquidationCheck = Date.now()
+      }
     }
 
     if (debtValue.gt(0) && (!position.lastLog || position.lastLog + positionLogInterval < Date.now())) {
@@ -211,7 +219,7 @@ async function checkPosition(position) {
       })
 
       if (hash) {
-          const msg = `Executing liquidation ${useFlashloan ? "with" : "without" } flashloan for ${getRevertUrlForDiscord(position.tokenId)} with gas cost of ${ethers.utils.formatUnits(gasCost, assetDecimals)} ${assetSymbol} and reward of ${ethers.utils.formatUnits(reward, assetDecimals)} ${assetSymbol} - ${getExplorerUrlForDiscord(hash)}`
+          const msg = `Executing liquidation ${useFlashloan ? "with" : "without" } flashloan for ${getRevertUrlForDiscord(position.tokenId)} with reward of ${ethers.utils.formatUnits(reward, assetDecimals)} ${assetSymbol} - ${getExplorerUrlForDiscord(hash)}`
           console.log(msg)
       } else {
           throw error
