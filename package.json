@@ -1,0 +1,14 @@
+{
+  "name": "adjustor-js",
+  "version": "1.0.0",
+  "description": "implementation of auto-bots",
+  "main": "index.js",
+  "dependencies": {
+    "@thanpolas/univ3prices": "^3.0.2",
+    "@uniswap/smart-order-router": "^3.20.2",
+    "async-mutex": "^0.4.0",
+    "axios": "^0.27.2",
+    "dotenv": "^16.0.1",
+    "ethers": "^5.5.4"
+  }
+}
