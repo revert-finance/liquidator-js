@@ -1,7 +1,7 @@
 {
-  "name": "adjustor-js",
+  "name": "liquidator-js",
   "version": "1.0.0",
-  "description": "implementation of auto-bots",
+  "description": "implementation of liquidator bot for revert lend",
   "main": "index.js",
   "dependencies": {
     "@thanpolas/univ3prices": "^3.0.2",

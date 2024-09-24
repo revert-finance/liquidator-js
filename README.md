@@ -23,6 +23,12 @@ NETWORK=arbitrum
 PRIVATE_KEY_LIQUIDATOR is the private key for the EAO account which has enough ETH to execute liquidations. For flashloan liquidations no USDC need to be present in the account. To enable non-flashloan liquidations you need to add USDC to the account and approve the V3Vault contract.
 
 
+Install needed dependencies.
+```
+npm install
+```
+
+
 ## Run the script
 
 ```
