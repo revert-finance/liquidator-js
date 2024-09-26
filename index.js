@@ -148,7 +148,7 @@ async function checkPosition(position) {
 
   } catch (err) { 
     console.log("Error checking position " + position.tokenId.toString(), err)
-    return
+    info = null
   }
 
   if (info && info.liquidationValue.gt(0)) {
@@ -229,6 +229,7 @@ async function checkPosition(position) {
     }
   } else if (info) {
     // update values if not liquidatable - but estimation indicated it was
+    position.isChecking = false
     await updatePosition(position.tokenId)
   }
 
@@ -285,6 +286,7 @@ async function run() {
           lastWSLifeCheck = time.getTime()
       }
 
+      // if price reference pool price changed - check all positions with affected token
       const affectedToken = getPoolToToken(asset, poolAddress)
       if (affectedToken) {
         const toCheckPositions = Object.values(positions).filter(p => p.token0 === affectedToken ||  p.token1 === affectedToken)
@@ -295,6 +297,7 @@ async function run() {
   })
 
   await loadPositions()
+
   setInterval(async () => { await updateDebtExchangeRate() }, 60000)
 }
 
