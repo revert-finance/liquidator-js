@@ -3,13 +3,13 @@ const { ethers, BigNumber } = require('ethers')
 const { quoteUniversalRouter, registerErrorHandler, npmContract, provider, signer, setupWebsocket, 
         getPool, getAllLogs, getPoolPrice, getAmounts, getTokenAssetPriceX96,
         getTickSpacing, getFlashloanPoolOptions, getV3VaultAddress, getFlashLoanLiquidatorAddress,
-        executeTx, getTokenDecimals, getTokenSymbol, getPoolToToken, 
+        executeTx, getTokenDecimals, getTokenSymbol, getPoolToToken,
         getRevertUrlForDiscord, getExplorerUrlForDiscord, Q32, Q96 } = require('./lib/common')
 
 const v3VaultContract = new ethers.Contract(getV3VaultAddress(), require("./contracts/V3Vault.json").abi, provider)
 const floashLoanLiquidatorContract = new ethers.Contract(getFlashLoanLiquidatorAddress(), require("./contracts/FlashloanLiquidator.json").abi, provider)
 
-const positionLogInterval = 10 * 60000 // log positions each 10 mins
+const positionLogInterval = 1 * 6000 // log positions each 1 min
 const enableNonFlashloanLiquidation = false
 
 const positions = {}
@@ -300,5 +300,11 @@ async function run() {
 
   setInterval(async () => { await updateDebtExchangeRate() }, 60000)
 }
+
+process.on('SIGINT', () => {
+  console.log('Received SIGINT. Shutting down gracefully...');
+  // Close any open connections, stop any ongoing operations
+  process.exit(0);
+});
 
 run()
