@@ -1,5 +1,6 @@
 require('dotenv').config()
 const { ethers, BigNumber } = require('ethers')
+const { logWithTimestamp} = require('./lib/common')
 const { quoteUniversalRouter, registerErrorHandler, npmContract, provider, signer, setupWebsocket, 
         getPool, getAllLogs, getPoolPrice, getAmounts, getTokenAssetPriceX96,
         getTickSpacing, getFlashloanPoolOptions, getV3VaultAddress, getFlashLoanLiquidatorAddress,
@@ -19,6 +20,8 @@ const cachedCollateralFactorX32 = {}
 let cachedExchangeRateX96
 let asset, assetDecimals, assetSymbol
 let lastWSLifeCheck = new Date().getTime()
+
+let isCheckingAllPositions = false;
 
 async function updateDebtExchangeRate() {
   const info = await v3VaultContract.vaultInfo()
@@ -40,7 +43,7 @@ async function loadPositions() {
       }
       adds = adds.filter(e => !v3VaultContract.interface.parseLog(e).args.tokenId.eq(tokenId))
   }
-  console.log(`Loaded ${loadedPositions} active positions`)
+  logWithTimestamp(`Loaded ${loadedPositions} active positions`)
 }
 
 
@@ -99,7 +102,7 @@ async function updatePosition(tokenId) {
   } catch(err) {
     // retry on error after 1 min
     setTimeout(async() => await updatePosition(tokenId), 60000)
-    console.log("Error updating position " + tokenId.toString(), err)
+    logWithTimestamp("Error updating position " + tokenId.toString(), err)
   }
 
   if (positions[tokenId]) {
@@ -143,13 +146,13 @@ async function checkPosition(position) {
       const factor = collateralValue.mul(100).div(debtValue).toNumber() / 100
       if (factor < 1.1) {
         const msg = `Low collateral factor ${factor.toFixed(2)} for ${getRevertUrlForDiscord(position.tokenId)} with debt ${ethers.utils.formatUnits(debtValue, assetDecimals)} ${assetSymbol}`
-        console.log(msg)
+        logWithTimestamp(msg)
         position.lastLog = Date.now()
       }
     }
 
   } catch (err) { 
-    console.log("Error checking position " + position.tokenId.toString(), err)
+    logWithTimestamp("Error checking position " + position.tokenId.toString(), err)
     info = null
   }
 
@@ -199,7 +202,7 @@ async function checkPosition(position) {
       try {
         gasLimit = await floashLoanLiquidatorContract.connect(signer).estimateGas.liquidate(params)
       } catch (err) {
-        console.log("Error trying flashloan liquidation for " + position.tokenId.toString(), err)
+        logWithTimestamp("Error trying flashloan liquidation for " + position.tokenId.toString(), err)
 
         if (enableNonFlashloanLiquidation) {
           // if there is any error with liquidation - fallback to non-flashloan liquidation
@@ -222,12 +225,12 @@ async function checkPosition(position) {
 
       if (hash) {
           const msg = `Executing liquidation ${useFlashloan ? "with" : "without" } flashloan for ${getRevertUrlForDiscord(position.tokenId)} with reward of ${ethers.utils.formatUnits(reward, assetDecimals)} ${assetSymbol} - ${getExplorerUrlForDiscord(hash)}`
-          console.log(msg)
+          logWithTimestamp(msg)
       } else {
           throw error
       }
     } catch (err) { 
-      console.log("Error liquidating position " + position.tokenId.toString(), err)
+      logWithTimestamp("Error liquidating position " + position.tokenId.toString(), err)
     }
   } else if (info) {
     // update values if not liquidatable - but estimation indicated it was
@@ -239,13 +242,23 @@ async function checkPosition(position) {
 }
 
 async function checkAllPositions() {
-  console.log("Performing regular check of all positions");
+  if (isCheckingAllPositions) {
+    logWithTimestamp("Regular check of all positions is already in progress. Skipping this execution.");
+    return;
+  }
+
+  isCheckingAllPositions = true;
+  logWithTimestamp("Performing regular check of all positions");
+
   try {
     for (const position of Object.values(positions)) {
       await checkPosition(position);
     }
+    logWithTimestamp("Regular check of all positions completed successfully");
   } catch (error) {
-    console.error("Error during regular position check:", error);
+    logWithTimestamp("Error during regular position check:", error);
+  } finally {
+    isCheckingAllPositions = false;
   }
 }
 
@@ -296,7 +309,7 @@ async function run() {
       const time = new Date()
       // every 5 minutes
       if (time.getTime() > lastWSLifeCheck + 300000) {
-          console.log("WS Live check", time.toISOString())
+          logWithTimestamp("WS Live check", time.toISOString())
           lastWSLifeCheck = time.getTime()
       }
 
@@ -316,13 +329,15 @@ async function run() {
 
   // Set up regular interval checks
   const CHECK_INTERVAL = 15 * 60 * 1000; // 15 minutes in milliseconds
-  setInterval(checkAllPositions, CHECK_INTERVAL);
-}
+  setInterval(async () => {
+    await checkAllPositions();
+  }, CHECK_INTERVAL);
 
-process.on('SIGINT', () => {
-  console.log('Received SIGINT. Shutting down gracefully...');
-  // Close any open connections, stop any ongoing operations
-  process.exit(0);
-});
+  process.on('SIGINT', () => {
+    logWithTimestamp('Received SIGINT. Shutting down gracefully...');
+    // Close any open connections, stop any ongoing operations
+    process.exit(0);
+  });
+}
 
 run()
