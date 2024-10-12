@@ -28,6 +28,7 @@ async function updateDebtExchangeRate() {
 async function loadPositions() {
   let adds = await getAllLogs(v3VaultContract.filters.Add())
   let removes = await getAllLogs(v3VaultContract.filters.Remove())
+  let loadedPositions = 0
   // from newest to oldest - process each event once - remove deactivated positions
   while (adds.length > 0) {
       const event = adds[adds.length - 1]
@@ -35,15 +36,16 @@ async function loadPositions() {
       const isActive = removes.filter(e => tokenId.eq(v3VaultContract.interface.parseLog(e).args.tokenId) && (e.blockNumber > event.blockNumber || (e.blockNumber == event.blockNumber && e.logIndex > event.logIndex))).length === 0
       if (isActive) {
         await updatePosition(tokenId)
+        loadedPositions++
       }
       adds = adds.filter(e => !v3VaultContract.interface.parseLog(e).args.tokenId.eq(tokenId))
   }
+  console.log(`Loaded ${loadedPositions} active positions`)
 }
 
 
 // loads all needed data for position
 async function updatePosition(tokenId) {
-
   // if processing - retry later
   if (positions[tokenId] && (positions[tokenId].isChecking || positions[tokenId].isExecuting || positions[tokenId].isUpdating)) { 
     setTimeout(async() => await updatePosition(tokenId), 10000)
@@ -236,6 +238,17 @@ async function checkPosition(position) {
   position.isChecking = false
 }
 
+async function checkAllPositions() {
+  console.log("Performing regular check of all positions");
+  try {
+    for (const position of Object.values(positions)) {
+      await checkPosition(position);
+    }
+  } catch (error) {
+    console.error("Error during regular position check:", error);
+  }
+}
+
 async function run() {
   
   registerErrorHandler()
@@ -278,10 +291,11 @@ async function run() {
           }
       }
     ], async function(poolAddress) {
+   
 
       const time = new Date()
-      // each minute
-      if (time.getTime() > lastWSLifeCheck + 60000) {
+      // every 5 minutes
+      if (time.getTime() > lastWSLifeCheck + 300000) {
           console.log("WS Live check", time.toISOString())
           lastWSLifeCheck = time.getTime()
       }
@@ -299,6 +313,10 @@ async function run() {
   await loadPositions()
 
   setInterval(async () => { await updateDebtExchangeRate() }, 60000)
+
+  // Set up regular interval checks
+  const CHECK_INTERVAL = 15 * 60 * 1000; // 15 minutes in milliseconds
+  setInterval(checkAllPositions, CHECK_INTERVAL);
 }
 
 process.on('SIGINT', () => {
