@@ -191,6 +191,12 @@ async function checkPosition(position) {
       const flashLoanPoolOptions = getFlashloanPoolOptions(asset)
       const flashLoanPool = flashLoanPoolOptions.filter(o => !pools.includes(o.toLowerCase()))[0]
 
+      // Add check for valid flash loan pool
+      if (!flashLoanPool) {
+        const msg = `No valid flash loan pool found for position ${position.tokenId.toString()} - all potential pools are already in use for swaps`
+        logWithTimestamp(msg)
+      }
+
       const reward = info.liquidationValue.sub(info.liquidationCost)
       
       const minReward = BigNumber.from(0) // 0% of reward must be recieved in assset after swaps and everything - rest in leftover token - no problem because flashloan liquidation
@@ -302,7 +308,18 @@ async function run() {
               await updatePosition(tokenId) 
             }
           }
+      },
+      {
+          filter: npmContract.filters.DecreaseLiquidity(),
+          handler: async (e) => {
+            const tokenId = npmContract.interface.parseLog(e).args.tokenId
+            console.log("DecreaseLiquidity", tokenId)
+            if (positions[tokenId]) {
+              await updatePosition(tokenId, true) 
+            }
+          }
       }
+
     ], async function(poolAddress) {
    
 
