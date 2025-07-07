@@ -313,7 +313,6 @@ async function run() {
           filter: npmContract.filters.DecreaseLiquidity(),
           handler: async (e) => {
             const tokenId = npmContract.interface.parseLog(e).args.tokenId
-            console.log("DecreaseLiquidity", tokenId)
             if (positions[tokenId]) {
               await updatePosition(tokenId, true) 
             }
