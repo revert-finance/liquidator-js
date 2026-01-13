@@ -13,18 +13,20 @@ Key features:
 - **Flashloan Liquidations**: Executes liquidations using flashloans, requiring no upfront capital in the asset being liquidated.
 - **Non-Flashloan Liquidations**: Optionally supports liquidations without flashloans if the liquidator holds the necessary USDC and has approved the V3Vault contract.
 
-Revert Lend contract is currently deployed on Arbitrum only:
+Supported networks and exchanges:
 
-- [Revert Lend Contract on Arbiscan](https://arbiscan.io/address/0x74e6afef5705beb126c6d3bf46f8fad8f3e07825)
+- **Arbitrum** (Uniswap V3): [V3Vault on Arbiscan](https://arbiscan.io/address/0x74e6afef5705beb126c6d3bf46f8fad8f3e07825)
+- **Base** (Uniswap V3): [V3Vault on Basescan](https://basescan.org/address/0x75D61a8270527CAfB31b7AeDC01195B47561fb3E)
+- **Base** (Aerodrome Lend): [V3Vault on Basescan](https://basescan.org/address/0x22ce292d882c7799183949509b011512352454cb)
 
 ## Getting Started
 
 ### Prerequisites
 
-- Node.js (v14 or higher)
+- Node.js (v18 or higher)
 - npm (v6 or higher)
-- An Ethereum-compatible wallet with sufficient ETH on Arbitrum
-- Access to Arbitrum RPC endpoints (both HTTP and WebSocket)
+- An Ethereum-compatible wallet with sufficient ETH on your target network (Arbitrum or Base)
+- Access to RPC endpoints (both HTTP and WebSocket) for your target network
 
 ### Installation
 
@@ -44,12 +46,44 @@ Revert Lend contract is currently deployed on Arbitrum only:
 
    Before running the script, create a `.env` file in the root directory with the following configurations:
 
+   **Arbitrum (Uniswap V3):**
    ```dotenv
    PRIVATE_KEY_LIQUIDATOR=your_private_key_here
    RPC_URL_ARBITRUM=your_arbitrum_rpc_url_here
    WS_RPC_URL_ARBITRUM=your_arbitrum_websocket_url_here
    NETWORK=arbitrum
    ```
+
+   **Base (Uniswap V3):**
+   ```dotenv
+   PRIVATE_KEY_LIQUIDATOR=your_private_key_here
+   RPC_URL_BASE=your_base_rpc_url_here
+   WS_RPC_URL_BASE=your_base_websocket_url_here
+   NETWORK=base
+   ```
+
+   **Base (Aerodrome Lend):**
+   ```dotenv
+   PRIVATE_KEY_LIQUIDATOR=your_private_key_here
+   RPC_URL_BASE=your_base_rpc_url_here
+   WS_RPC_URL_BASE=your_base_websocket_url_here
+   NETWORK=base
+   EXCHANGE=aerodrome
+   ```
+
+   **Running both Uniswap and Aerodrome liquidators on Base:**
+
+   If you want to run separate liquidator instances for both Uniswap V3 and Aerodrome on Base, you can specify a separate private key for Aerodrome:
+   ```dotenv
+   PRIVATE_KEY_LIQUIDATOR=your_uniswap_private_key_here
+   PRIVATE_KEY_LIQUIDATOR_AERODROME=your_aerodrome_private_key_here
+   RPC_URL_BASE=your_base_rpc_url_here
+   WS_RPC_URL_BASE=your_base_websocket_url_here
+   NETWORK=base
+   EXCHANGE=aerodrome  # or omit for Uniswap V3
+   ```
+
+   When `EXCHANGE=aerodrome`, the bot will use `PRIVATE_KEY_LIQUIDATOR_AERODROME` if set, otherwise falls back to `PRIVATE_KEY_LIQUIDATOR`.
 
 4. **Optional: Non-Flashloan Liquidations**
 
@@ -107,7 +141,7 @@ A few options can be configured in the `index.js` file:
 
 ## Important Notes
 
-- **Gas Fees**: Ensure your liquidator account has enough ETH on Arbitrum to cover gas fees.
+- **Gas Fees**: Ensure your liquidator account has enough ETH on your target network to cover gas fees.
 - **Security**: Keep your private keys secure. Do not share or commit them to version control.
 - **Dependencies**: The bot relies on several external services (e.g., RPC providers). Ensure your connections are reliable.
 
