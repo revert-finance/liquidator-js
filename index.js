@@ -1,11 +1,12 @@
 require('dotenv').config()
 const { ethers, BigNumber } = require('ethers')
 const { logWithTimestamp} = require('./lib/common')
-const { quoteUniversalRouter, registerErrorHandler, npmContract, provider, signer, setupWebsocket, 
+const { quoteUniversalRouter, registerErrorHandler, npmContract, provider, signer, setupWebsocket,
         getPool, getAllLogs, getPoolPrice, getAmounts, getTokenAssetPriceX96,
         getTickSpacing, getFlashloanPoolOptions, getV3VaultAddress, getFlashLoanLiquidatorAddress,
         executeTx, getTokenDecimals, getTokenSymbol, getPoolToToken,
-        getRevertUrlForDiscord, getExplorerUrlForDiscord, Q32, Q96 } = require('./lib/common')
+        getRevertUrlForDiscord, getExplorerUrlForDiscord, Q32, Q96,
+        isAerodromeVault, getAerodromePool } = require('./lib/common')
 
 const v3VaultContract = new ethers.Contract(getV3VaultAddress(), require("./contracts/V3Vault.json").abi, provider)
 const floashLoanLiquidatorContract = new ethers.Contract(getFlashLoanLiquidatorAddress(), require("./contracts/FlashloanLiquidator.json").abi, provider)
@@ -65,14 +66,37 @@ async function updatePosition(tokenId) {
     const debtShares = await v3VaultContract.loans(tokenId)
     if (debtShares.gt(0)) {
       // add or update
-      const { liquidity, tickLower, tickUpper, fee, token0, token1 } = await npmContract.positions(tokenId);
-      const tickSpacing = getTickSpacing(fee)
-      const poolAddress = await getPool(token0, token1, fee)
+      const position = await npmContract.positions(tokenId)
+      const { liquidity, tickLower, tickUpper, token0, token1 } = position
+
+      let tickSpacing, poolAddress, fee
+      if (isAerodromeVault()) {
+        // Aerodrome NPM returns tickSpacing directly in the 5th field
+        tickSpacing = position.tickSpacing
+        poolAddress = await getAerodromePool(token0, token1, tickSpacing)
+        fee = tickSpacing // Store tickSpacing in fee field for Aerodrome
+      } else {
+        // Uniswap V3 NPM returns fee which we convert to tickSpacing
+        fee = position.fee
+        tickSpacing = getTickSpacing(fee)
+        poolAddress = await getPool(token0, token1, fee)
+      }
       
       const owner = await v3VaultContract.ownerOf(tokenId)
 
       // get current fees - for estimation
-      const fees = await npmContract.connect(v3VaultContract.address).callStatic.collect([tokenId, ethers.constants.AddressZero, BigNumber.from(2).pow(128).sub(1), BigNumber.from(2).pow(128).sub(1)])
+      // NFT may be owned by vault directly, or by a transformer (e.g. gaugeManager)
+      let fees = { amount0: BigNumber.from(0), amount1: BigNumber.from(0) }
+      try {
+        const nftOwner = await npmContract.ownerOf(tokenId)
+        fees = await npmContract.callStatic.collect(
+          [tokenId, ethers.constants.AddressZero, BigNumber.from(2).pow(128).sub(1), BigNumber.from(2).pow(128).sub(1)],
+          { from: nftOwner }
+        )
+      } catch (e) {
+        // Fees will be estimated as 0 - may affect collateral calculation
+        logWithTimestamp(`Fee estimation failed for position ${tokenId}: ${e.message}`)
+      }
 
       if (cachedTokenDecimals[token0] === undefined) {
         cachedTokenDecimals[token0] = await getTokenDecimals(token0)
