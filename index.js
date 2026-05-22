@@ -24,6 +24,28 @@ let lastWSLifeCheck = new Date().getTime()
 
 let isCheckingAllPositions = false;
 
+
+async function isSequencerSafe(chain) {
+  try {
+    const https = require('https')
+    const data = await new Promise((resolve, reject) => {
+      https.get('https://rtt.phoenix-ai.work/api/public-feed', { timeout: 3000 }, res => {
+        let buf = ''
+        res.on('data', d => buf += d)
+        res.on('end', () => { try { resolve(JSON.parse(buf)) } catch(e) { resolve(null) } })
+      }).on('error', reject).on('timeout', reject)
+    })
+    if (!data || !data.data || !data.data.length) return true
+    const latest = data.data[data.data.length - 1]
+    const p99 = latest[chain + '_p99'] || 0
+    const revert = latest[chain + '_revert'] || 0
+    if (p99 > (chain === 'base' ? 1200 : 400) || revert > 0.10) return false
+    return true
+  } catch (e) {
+    return true // fail-open: oracle unreachable, proceed
+  }
+}
+
 async function updateDebtExchangeRate() {
   const info = await v3VaultContract.vaultInfo()
   cachedExchangeRateX96 = info.debtExchangeRateX96
@@ -178,6 +200,14 @@ async function checkPosition(position) {
   } catch (err) { 
     logWithTimestamp("Error checking position " + position.tokenId.toString(), err)
     info = null
+  }
+
+  // Phoenix Zero RTT sequencer health check — skip if congested
+  const chainKey = isAerodromeVault() ? 'base' : 'arb'
+  if (!(await isSequencerSafe(chainKey))) {
+    logWithTimestamp(`Sequencer congested on ${chainKey} (Phoenix Zero RTT), skipping position ${position.tokenId}`)
+    position.isChecking = false
+    return
   }
 
   if (info && info.liquidationValue.gt(0)) {
